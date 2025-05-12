@@ -1,0 +1,43 @@
+
+goal:
+
+"clone" a go module on the fly so that users can import the "same" packages
+multiple times at different versions.
+
+plan:
+
+needs to be:
+- an http server for vanity imports
+- a module proxy that serves code
+
+see go mod proxy reference: https://go.dev/ref/mod#module-proxy
+specifically: https://go.dev/ref/mod#serving-from-proxy
+
+the http server accepts paths like:
+
+https://goclone.zone/go.temporal.io/sdk?go-get=1
+
+
+and replies:
+
+<meta name="go-import" content="goclone.zone/go.temporal.io/sdk mod https://goclone.zone/_mod/">
+
+then it acccepts urls like:
+
+https://goclone.zone/_mod/go.temporal.io/sdk/@v/list
+https://goclone.zone/_mod/go.temporal.io/sdk/@v/$version.info
+etc.
+
+and proxies them to
+
+proxy.golang.org/go.temporal.io/sdk/@v/list
+proxy.golang.org/go.temporal.io/sdk/@v/$version.info
+
+except it rewrites anything like "go.temporal.io/sdk" to
+"goclone.zone/go.temporal.io/sdk"
+
+key part:
+it also rewrites all imports inside .go files in .zip files in the same way!
+
+this should be implemented in go.
+
