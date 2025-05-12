@@ -8,12 +8,13 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	"golang.org/x/mod/modfile"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"golang.org/x/mod/modfile"
 )
 
 var (
@@ -94,59 +95,6 @@ func rewriteGoMod(src []byte, old, new string) ([]byte, error) {
 					r.Syntax.Token[2] = r.Mod.Version
 				}
 			}
-			changed = true
-		}
-	}
-	for _, e := range f.Exclude {
-		if e.Mod.Path == old || strings.HasPrefix(e.Mod.Path, old+"/") {
-			newPath := new + strings.TrimPrefix(e.Mod.Path, old)
-			e.Mod.Path = newPath
-			if e.Syntax.InBlock {
-				if len(e.Syntax.Token) >= 1 {
-					e.Syntax.Token[0] = modfile.AutoQuote(newPath)
-				}
-				if len(e.Syntax.Token) >= 2 {
-					e.Syntax.Token[1] = e.Mod.Version
-				}
-			} else {
-				if len(e.Syntax.Token) >= 2 {
-					e.Syntax.Token[1] = modfile.AutoQuote(newPath)
-				}
-				if len(e.Syntax.Token) >= 3 {
-					e.Syntax.Token[2] = e.Mod.Version
-				}
-			}
-			changed = true
-		}
-	}
-	for _, r := range f.Replace {
-		repChanged := false
-		if r.Old.Path == old || strings.HasPrefix(r.Old.Path, old+"/") {
-			r.Old.Path = new + strings.TrimPrefix(r.Old.Path, old)
-			repChanged = true
-		}
-		if r.New.Path == old || strings.HasPrefix(r.New.Path, old+"/") {
-			r.New.Path = new + strings.TrimPrefix(r.New.Path, old)
-			repChanged = true
-		}
-		if repChanged {
-			tokens := []string{}
-			if r.Syntax.InBlock {
-				tokens = append(tokens, modfile.AutoQuote(r.Old.Path))
-				if r.Old.Version != "" {
-					tokens = append(tokens, r.Old.Version)
-				}
-			} else {
-				tokens = append(tokens, "replace", modfile.AutoQuote(r.Old.Path))
-				if r.Old.Version != "" {
-					tokens = append(tokens, r.Old.Version)
-				}
-			}
-			tokens = append(tokens, "=>", modfile.AutoQuote(r.New.Path))
-			if r.New.Version != "" {
-				tokens = append(tokens, r.New.Version)
-			}
-			r.Syntax.Token = tokens
 			changed = true
 		}
 	}
