@@ -110,7 +110,7 @@ func TestEndToEndGoToolchain(t *testing.T) {
 		"GOMODCACHE="+modCache,
 		"GOPROXY="+srv.URL+"/_mod",
 		"GOSUMDB=off",
-		"GOFLAGS=-buildvcs=false",
+		"GOFLAGS=-buildvcs=false -modcacherw",
 	)
 
 	cmd := exec.Command("go", "mod", "download", "all")
