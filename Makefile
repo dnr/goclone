@@ -3,7 +3,7 @@
 build: bootstrap
 
 bootstrap: main.go
-	GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
 
 function.zip: bootstrap
 	zip -j function.zip bootstrap

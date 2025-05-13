@@ -14,7 +14,7 @@ The Lambda uses the `provided.al2` runtime, so the executable must be named
 `bootstrap`:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
 zip function.zip bootstrap
 ```
 
