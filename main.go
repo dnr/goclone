@@ -3,6 +3,8 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go/format"
@@ -11,6 +13,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 
@@ -217,10 +221,106 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
+// lambdaRequest is a minimal subset of the Lambda Function URL event.
+type lambdaRequest struct {
+	RawPath         string            `json:"rawPath"`
+	RawQueryString  string            `json:"rawQueryString"`
+	Headers         map[string]string `json:"headers"`
+	Body            string            `json:"body"`
+	IsBase64Encoded bool              `json:"isBase64Encoded"`
+	RequestContext  struct {
+		HTTP struct {
+			Method string `json:"method"`
+		} `json:"http"`
+	} `json:"requestContext"`
+}
+
+type lambdaResponse struct {
+	StatusCode      int               `json:"statusCode"`
+	Headers         map[string]string `json:"headers"`
+	Body            string            `json:"body"`
+	IsBase64Encoded bool              `json:"isBase64Encoded"`
+}
+
+func handleLambda(req lambdaRequest) (lambdaResponse, error) {
+	url := req.RawPath
+	if req.RawQueryString != "" {
+		url += "?" + req.RawQueryString
+	}
+	body := []byte(req.Body)
+	if req.IsBase64Encoded {
+		var err error
+		body, err = base64.StdEncoding.DecodeString(req.Body)
+		if err != nil {
+			return lambdaResponse{}, err
+		}
+	}
+	r, err := http.NewRequest(req.RequestContext.HTTP.Method, url, bytes.NewReader(body))
+	if err != nil {
+		return lambdaResponse{}, err
+	}
+	for k, v := range req.Headers {
+		r.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	http.DefaultServeMux.ServeHTTP(w, r)
+
+	resp := lambdaResponse{
+		StatusCode: w.Code,
+		Headers:    map[string]string{},
+		Body:       w.Body.String(),
+	}
+	for k, v := range w.Header() {
+		if len(v) > 0 {
+			resp.Headers[k] = v[0]
+		}
+	}
+	return resp, nil
+}
+
+func postLambdaError(client *http.Client, api, id string, err error) {
+	payload := map[string]string{"errorMessage": err.Error()}
+	b, _ := json.Marshal(payload)
+	client.Post("http://"+api+"/2018-06-01/runtime/invocation/"+id+"/error", "application/json", bytes.NewReader(b))
+}
+
+func lambdaLoop() {
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API")
+	client := &http.Client{}
+	for {
+		resp, err := client.Get("http://" + api + "/2018-06-01/runtime/invocation/next")
+		if err != nil {
+			log.Fatal(err)
+		}
+		id := resp.Header.Get("Lambda-Runtime-Aws-Request-Id")
+		data, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		var event lambdaRequest
+		if err := json.Unmarshal(data, &event); err != nil {
+			postLambdaError(client, api, id, err)
+			continue
+		}
+		out, err := handleLambda(event)
+		if err != nil {
+			postLambdaError(client, api, id, err)
+			continue
+		}
+		b, _ := json.Marshal(out)
+		_, err = client.Post("http://"+api+"/2018-06-01/runtime/invocation/"+id+"/response", "application/json", bytes.NewReader(b))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 	http.HandleFunc("/_mod/", proxyHandler)
 	http.HandleFunc("/", indexHandler)
+	if os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {
+		lambdaLoop()
+		return
+	}
 	log.Printf("listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
