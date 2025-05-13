@@ -182,3 +182,17 @@ func TestVanityHandler(t *testing.T) {
 }
 
 func stringPtr(s string) *string { return &s }
+
+func TestParseProxyPath(t *testing.T) {
+	up, orig, rest, ok := parseProxyPath("_two/golang.org/x/text/@v/list")
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	if up != "_two/golang.org/x/text" || orig != "golang.org/x/text" || rest != "list" {
+		t.Fatalf("unexpected result %q %q %q", up, orig, rest)
+	}
+	_, _, _, ok = parseProxyPath("_mod/golang.org/x/text/@v/list")
+	if ok {
+		t.Fatal("expected failure for reserved clone name")
+	}
+}
