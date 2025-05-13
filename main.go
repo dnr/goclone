@@ -193,6 +193,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	for k, v := range resp.Header {
 		w.Header()[k] = v
 	}
+	// Go's HTTP client automatically decompresses gzip responses. If the
+	// upstream sent a gzip encoded body, resp.Body will already be
+	// decompressed but the Content-Encoding header will still be present.
+	// Strip it to avoid telling the client the body is gzip when it isn't.
+	w.Header().Del("Content-Encoding")
 	if strings.HasSuffix(trimmed, ".zip") || strings.HasSuffix(trimmed, ".mod") {
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -270,12 +275,19 @@ func handleLambda(req lambdaRequest) (lambdaResponse, error) {
 	resp := lambdaResponse{
 		StatusCode: w.Code,
 		Headers:    map[string]string{},
-		Body:       w.Body.String(),
 	}
 	for k, v := range w.Header() {
 		if len(v) > 0 {
 			resp.Headers[k] = v[0]
 		}
+	}
+	respBody := w.Body.Bytes()
+	ct := resp.Headers["Content-Type"]
+	if !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "json") {
+		resp.Body = base64.StdEncoding.EncodeToString(respBody)
+		resp.IsBase64Encoded = true
+	} else {
+		resp.Body = string(respBody)
 	}
 	return resp, nil
 }
