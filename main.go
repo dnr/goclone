@@ -156,7 +156,7 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 			}
 		}
 		hdr := &zip.FileHeader{
-			Name:   *host + "/" + f.Name,
+			Name:   strings.Replace(f.Name, old, new, 1),
 			Method: f.Method,
 		}
 		if fw, err := w.CreateHeader(hdr); err == nil {
@@ -193,6 +193,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	for k, v := range resp.Header {
 		w.Header()[k] = v
 	}
+	// Go's HTTP client automatically decompresses gzip responses. If the
+	// upstream sent a gzip encoded body, resp.Body will already be
+	// decompressed but the Content-Encoding header will still be present.
+	// Strip it to avoid telling the client the body is gzip when it isn't.
+	w.Header().Del("Content-Encoding")
 	if strings.HasSuffix(trimmed, ".zip") || strings.HasSuffix(trimmed, ".mod") {
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
