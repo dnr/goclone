@@ -155,7 +155,7 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 				return nil, err
 			}
 		}
-		if f.Name == old || strings.HasPrefix(f.Name, old+"/") {
+		if f.Name == old || strings.HasPrefix(f.Name, old+"/") || strings.HasPrefix(f.Name, old+"@") {
 			f.Name = strings.Replace(f.Name, old, new, 1)
 		}
 		hdr := &zip.FileHeader{
