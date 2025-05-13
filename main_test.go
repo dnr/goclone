@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -156,6 +157,47 @@ func TestRewriteZipSubstring(t *testing.T) {
 		rc.Close()
 		if bytes.Contains(data, []byte("new/mod")) {
 			t.Errorf("unexpected rewrite in %s: %s", f.Name, data)
+		}
+	}
+}
+
+func TestRewriteZipWithPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	prefix := "old/mod@v1.0.0/"
+	gof, _ := w.Create(prefix + "foo.go")
+	gof.Write([]byte("package foo\nimport \"old/mod/pkg\""))
+	modf, _ := w.Create(prefix + "go.mod")
+	modf.Write([]byte("module old/mod\n\nrequire old/mod/pkg v1.0.0\n"))
+	w.Close()
+
+	out, err := rewriteZip(buf.Bytes(), "old/mod", "example.com/_two/old/mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.File {
+		if !strings.HasPrefix(f.Name, "example.com/_two/old/mod@v1.0.0/") {
+			t.Errorf("filename not rewritten: %s", f.Name)
+		}
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		if strings.Contains(f.Name, "foo.go") && !bytes.Contains(data, []byte("example.com/_two/old/mod/pkg")) {
+			t.Errorf("foo.go import not rewritten: %s", data)
+		}
+		if strings.HasSuffix(f.Name, "go.mod") {
+			mf, err := modfile.Parse("go.mod", data, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mf.Module.Mod.Path != "example.com/_two/old/mod" {
+				t.Errorf("module path not rewritten: %s", mf.Module.Mod.Path)
+			}
 		}
 	}
 }
