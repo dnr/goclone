@@ -275,12 +275,19 @@ func handleLambda(req lambdaRequest) (lambdaResponse, error) {
 	resp := lambdaResponse{
 		StatusCode: w.Code,
 		Headers:    map[string]string{},
-		Body:       w.Body.String(),
 	}
 	for k, v := range w.Header() {
 		if len(v) > 0 {
 			resp.Headers[k] = v[0]
 		}
+	}
+	respBody := w.Body.Bytes()
+	ct := resp.Headers["Content-Type"]
+	if !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "json") {
+		resp.Body = base64.StdEncoding.EncodeToString(respBody)
+		resp.IsBase64Encoded = true
+	} else {
+		resp.Body = string(respBody)
 	}
 	return resp, nil
 }
