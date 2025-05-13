@@ -9,11 +9,13 @@ This configuration deploys the `goclone` service as an AWS Lambda with a public 
 
 ## Build the Lambda package
 
-From the repository root, build the binary for Linux and create a zip archive:
+From the repository root, build the binary for Linux and create a zip archive.
+The Lambda uses the `provided.al2` runtime, so the executable must be named
+`bootstrap`:
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o goclone main.go
-zip function.zip goclone
+GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
+zip function.zip bootstrap
 ```
 
 Use the full path to `function.zip` when applying Terraform:
