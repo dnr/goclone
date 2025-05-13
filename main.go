@@ -33,6 +33,20 @@ func vanityHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, html)
 }
 
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" || r.URL.Query().Get("go-get") == "1" {
+		vanityHandler(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<html>
+<body>
+<h1>goclone</h1>
+<p>See <a href="https://github.com/dnr/goclone">https://github.com/dnr/goclone</a> for usage instructions.</p>
+</body>
+</html>`)
+}
+
 func rewriteGoImports(src []byte, old, new string) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -206,7 +220,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 	http.HandleFunc("/_mod/", proxyHandler)
-	http.HandleFunc("/", vanityHandler)
+	http.HandleFunc("/", indexHandler)
 	log.Printf("listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
