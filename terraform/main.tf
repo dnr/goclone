@@ -32,11 +32,11 @@ resource "aws_iam_role_policy_attachment" "basic" {
 }
 
 resource "aws_lambda_function" "goclone" {
-  function_name = "goclone"
-  role          = aws_iam_role.lambda_role.arn
-  handler       = "goclone"
-  runtime       = "go1.x"
-  filename      = var.lambda_package
+  function_name    = "goclone"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "bootstrap"
+  runtime          = "provided.al2"
+  filename         = var.lambda_package
   source_code_hash = filebase64sha256(var.lambda_package)
 }
 
