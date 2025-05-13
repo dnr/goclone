@@ -155,8 +155,11 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 				return nil, err
 			}
 		}
+		if f.Name == old || strings.HasPrefix(f.Name, old+"/") {
+			f.Name = strings.Replace(f.Name, old, new, 1)
+		}
 		hdr := &zip.FileHeader{
-			Name:   *host + "/" + f.Name,
+			Name:   f.Name,
 			Method: f.Method,
 		}
 		if fw, err := w.CreateHeader(hdr); err == nil {
