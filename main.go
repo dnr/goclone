@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 
@@ -148,14 +149,14 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if f.Name == "go.mod" {
+		} else if path.Base(f.Name) == "go.mod" {
 			b, err = rewriteGoMod(b, old, new)
 			if err != nil {
 				return nil, err
 			}
 		}
 		hdr := &zip.FileHeader{
-			Name:   f.Name,
+			Name:   *host + "/" + f.Name,
 			Method: f.Method,
 		}
 		if fw, err := w.CreateHeader(hdr); err == nil {
@@ -174,6 +175,7 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	trimmed := strings.TrimPrefix(r.URL.Path, "/_mod/")
+	trimmed = strings.TrimPrefix(trimmed, *host+"/")
 	parts := strings.SplitN(trimmed, "/@v/", 2)
 	if len(parts) != 2 {
 		http.NotFound(w, r)
