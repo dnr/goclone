@@ -38,6 +38,8 @@ resource "aws_lambda_function" "goclone" {
   runtime          = "provided.al2"
   filename         = var.lambda_package
   source_code_hash = filebase64sha256(var.lambda_package)
+  memory_size      = 512
+  timeout          = 30
 }
 
 resource "aws_lambda_function_url" "goclone" {

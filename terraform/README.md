@@ -27,3 +27,6 @@ terraform -chdir=terraform apply -var="lambda_package=$(pwd)/function.zip"
 
 The output will include a `function_url` you can use for testing.
 You can also run `make deploy` to build the package and apply this Terraform configuration.
+
+The Lambda is configured with a 30 second timeout and 512 MB of memory to
+handle large modules.
