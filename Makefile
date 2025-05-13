@@ -1,14 +1,17 @@
 .PHONY: build package deploy clean
 
-build:
-        GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
+build: bootstrap
 
-package: build
-        zip -j function.zip bootstrap
+bootstrap: main.go
+	GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
 
-deploy: package
+function.zip: bootstrap
+	zip -j function.zip bootstrap
+
+.PHONY: deploy
+deploy: function.zip
 	terraform -chdir=terraform init
 	terraform -chdir=terraform apply -var="lambda_package=$(PWD)/function.zip"
 
 clean:
-        rm -f bootstrap function.zip
+	rm -f bootstrap function.zip
