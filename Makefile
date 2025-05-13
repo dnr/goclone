@@ -2,8 +2,8 @@
 
 build: bootstrap
 
-bootstrap: main.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
+bootstrap: main.go Makefile
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
 
 function.zip: bootstrap
 	zip -j function.zip bootstrap
