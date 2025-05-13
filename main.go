@@ -176,16 +176,33 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func parseProxyPath(p string) (userPath, upstreamPath, rest string, ok bool) {
+	parts := strings.SplitN(p, "/@v/", 2)
+	if len(parts) != 2 {
+		return "", "", "", false
+	}
+	userPath = parts[0]
+	rest = parts[1]
+	upstreamPath = userPath
+	if strings.HasPrefix(upstreamPath, "_") {
+		segs := strings.SplitN(upstreamPath, "/", 2)
+		if len(segs) != 2 || segs[0] == "_mod" {
+			return "", "", "", false
+		}
+		upstreamPath = segs[1]
+	}
+	return userPath, upstreamPath, rest, true
+}
+
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	trimmed := strings.TrimPrefix(r.URL.Path, "/_mod/")
 	trimmed = strings.TrimPrefix(trimmed, *host+"/")
-	parts := strings.SplitN(trimmed, "/@v/", 2)
-	if len(parts) != 2 {
+	userPath, upstreamPath, rest, ok := parseProxyPath(trimmed)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	modPath := parts[0]
-	upstreamURL := fmt.Sprintf("%s/%s", *upstream, trimmed)
+	upstreamURL := fmt.Sprintf("%s/%s/@v/%s", *upstream, upstreamPath, rest)
 	resp, err := http.Get(upstreamURL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -207,15 +224,15 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		newPath := fmt.Sprintf("%s/%s", *host, modPath)
+		newPath := fmt.Sprintf("%s/%s", *host, userPath)
 		if strings.HasSuffix(trimmed, ".zip") {
-			data, err = rewriteZip(data, modPath, newPath)
+			data, err = rewriteZip(data, upstreamPath, newPath)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		} else { // .mod
-			data, err = rewriteGoMod(data, modPath, newPath)
+			data, err = rewriteGoMod(data, upstreamPath, newPath)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
