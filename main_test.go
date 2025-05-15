@@ -15,7 +15,7 @@ import (
 
 func TestRewriteGoImports(t *testing.T) {
 	src := []byte("package p\n\nimport (\n    \"fmt\"\n    \"old/mod/pkg\"\n)")
-	out, err := rewriteGoImports(src, "old/mod", "new/mod")
+	out, err := rewriteGoImports(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestRewriteGoImports(t *testing.T) {
 
 func TestRewriteGoImportsNoChange(t *testing.T) {
 	src := []byte("package p\nimport \"fmt\"")
-	out, err := rewriteGoImports(src, "old/mod", "new/mod")
+	out, err := rewriteGoImports(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestRewriteGoImportsNoChange(t *testing.T) {
 
 func TestRewriteGoImportsSubstring(t *testing.T) {
 	src := []byte("package p\nimport \"somethingelse/old/mod/pkg\"")
-	out, err := rewriteGoImports(src, "old/mod", "new/mod")
+	out, err := rewriteGoImports(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestRewriteGoImportsSubstring(t *testing.T) {
 
 func TestRewriteGoMod(t *testing.T) {
 	src := []byte("module old/mod\n\nrequire old/mod/pkg v1.0.0\n")
-	out, err := rewriteGoMod(src, "old/mod", "new/mod")
+	out, err := rewriteGoMod(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestRewriteGoMod(t *testing.T) {
 
 func TestRewriteGoModNoChange(t *testing.T) {
 	src := []byte("module other/mod\n\nrequire other/mod/pkg v1.0.0\n")
-	out, err := rewriteGoMod(src, "old/mod", "new/mod")
+	out, err := rewriteGoMod(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestRewriteGoModNoChange(t *testing.T) {
 
 func TestRewriteGoModSubstring(t *testing.T) {
 	src := []byte("module somethingelse/old/mod\n\nrequire somethingelse/old/mod/pkg v1.0.0\n")
-	out, err := rewriteGoMod(src, "old/mod", "new/mod")
+	out, err := rewriteGoMod(src, map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRewriteZip(t *testing.T) {
 	modf.Write([]byte("module old/mod\n\nrequire old/mod/pkg v1.0.0\n"))
 	w.Close()
 
-	out, err := rewriteZip(buf.Bytes(), "old/mod", "new/mod")
+	out, err := rewriteZip(buf.Bytes(), map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestRewriteZipSubstring(t *testing.T) {
 	modf.Write([]byte("module somethingelse/old/mod\n"))
 	w.Close()
 
-	out, err := rewriteZip(buf.Bytes(), "old/mod", "new/mod")
+	out, err := rewriteZip(buf.Bytes(), map[string]string{"old/mod": "new/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestRewriteZipWithPrefix(t *testing.T) {
 	modf.Write([]byte("module old/mod\n\nrequire old/mod/pkg v1.0.0\n"))
 	w.Close()
 
-	out, err := rewriteZip(buf.Bytes(), "old/mod", "example.com/_two/old/mod")
+	out, err := rewriteZip(buf.Bytes(), map[string]string{"old/mod": "example.com/_two/old/mod"})
 	if err != nil {
 		t.Fatal(err)
 	}
