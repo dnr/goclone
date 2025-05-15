@@ -47,3 +47,9 @@ key part:
 it also rewrites all imports inside .go files in .zip files in the same way!
 and the file names in .zip files.
 
+
+New feature: a module can indicate that some of its dependencies should also be
+cloned when it is cloned. Add `// goclone:recursive` to the require line in a
+go.mod. When a module with such a comment is fetched through goclone, its
+references to that dependency are rewritten to point at a clone of the
+dependency using the same clone prefix.

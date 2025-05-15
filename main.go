@@ -52,7 +52,39 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 </html>`)
 }
 
-func rewriteGoImports(src []byte, old, new string) ([]byte, error) {
+// rewritePath returns the rewritten path according to the replacements map.
+// If no replacement applies, the original path is returned unchanged.
+func rewritePath(p string, repl map[string]string) string {
+	best := ""
+	for old := range repl {
+		if p == old || strings.HasPrefix(p, old+"/") {
+			if len(old) > len(best) {
+				best = old
+			}
+		}
+	}
+	if best == "" {
+		return p
+	}
+	return repl[best] + strings.TrimPrefix(p, best)
+}
+
+func rewriteFileName(name string, repl map[string]string) string {
+	best := ""
+	for old := range repl {
+		if name == old || strings.HasPrefix(name, old+"/") || strings.HasPrefix(name, old+"@") {
+			if len(old) > len(best) {
+				best = old
+			}
+		}
+	}
+	if best == "" {
+		return name
+	}
+	return strings.Replace(name, best, repl[best], 1)
+}
+
+func rewriteGoImports(src []byte, repl map[string]string) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -64,8 +96,8 @@ func rewriteGoImports(src []byte, old, new string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if path == old || strings.HasPrefix(path, old+"/") {
-			newPath := new + strings.TrimPrefix(path, old)
+		newPath := rewritePath(path, repl)
+		if newPath != path {
 			imp.Path.Value = strconv.Quote(newPath)
 			changed = true
 		}
@@ -80,15 +112,81 @@ func rewriteGoImports(src []byte, old, new string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func rewriteGoMod(src []byte, old, new string) ([]byte, error) {
+// recursiveDeps returns the paths of required modules that have the
+// "goclone:recursive" comment.
+func recursiveDeps(modData []byte) ([]string, error) {
+	f, err := modfile.Parse("go.mod", modData, nil)
+	if err != nil {
+		return nil, err
+	}
+	var deps []string
+	for _, r := range f.Require {
+		for _, c := range r.Syntax.Suffix {
+			if strings.Contains(c.Token, "goclone:recursive") {
+				deps = append(deps, r.Mod.Path)
+				break
+			}
+		}
+	}
+	return deps, nil
+}
+
+func extractGoModFromZip(data []byte) ([]byte, error) {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range r.File {
+		if path.Base(f.Name) == "go.mod" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			b, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("go.mod not found")
+}
+
+func makeReplacements(userPath, upstreamPath string, modData []byte) (map[string]string, error) {
+	repl := map[string]string{
+		upstreamPath: fmt.Sprintf("%s/%s", *host, userPath),
+	}
+	deps, err := recursiveDeps(modData)
+	if err != nil {
+		return nil, err
+	}
+	prefix := ""
+	if strings.HasPrefix(userPath, "_") {
+		segs := strings.SplitN(userPath, "/", 2)
+		if len(segs) == 2 {
+			prefix = segs[0]
+		}
+	}
+	for _, d := range deps {
+		newPath := fmt.Sprintf("%s/%s", *host, d)
+		if prefix != "" {
+			newPath = fmt.Sprintf("%s/%s/%s", *host, prefix, d)
+		}
+		repl[d] = newPath
+	}
+	return repl, nil
+}
+
+func rewriteGoMod(src []byte, repl map[string]string) ([]byte, error) {
 	f, err := modfile.Parse("go.mod", src, nil)
 	if err != nil {
 		return nil, err
 	}
 	changed := false
 	if f.Module != nil {
-		if f.Module.Mod.Path == old || strings.HasPrefix(f.Module.Mod.Path, old+"/") {
-			newPath := new + strings.TrimPrefix(f.Module.Mod.Path, old)
+		newPath := rewritePath(f.Module.Mod.Path, repl)
+		if newPath != f.Module.Mod.Path {
 			if err := f.AddModuleStmt(newPath); err != nil {
 				return nil, err
 			}
@@ -96,8 +194,8 @@ func rewriteGoMod(src []byte, old, new string) ([]byte, error) {
 		}
 	}
 	for _, r := range f.Require {
-		if r.Mod.Path == old || strings.HasPrefix(r.Mod.Path, old+"/") {
-			newPath := new + strings.TrimPrefix(r.Mod.Path, old)
+		newPath := rewritePath(r.Mod.Path, repl)
+		if newPath != r.Mod.Path {
 			r.Mod.Path = newPath
 			if r.Syntax.InBlock {
 				if len(r.Syntax.Token) >= 1 {
@@ -127,7 +225,7 @@ func rewriteGoMod(src []byte, old, new string) ([]byte, error) {
 	return b, nil
 }
 
-func rewriteZip(data []byte, old, new string) ([]byte, error) {
+func rewriteZip(data []byte, repl map[string]string) ([]byte, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, err
@@ -145,18 +243,19 @@ func rewriteZip(data []byte, old, new string) ([]byte, error) {
 			return nil, err
 		}
 		if strings.HasSuffix(f.Name, ".go") {
-			b, err = rewriteGoImports(b, old, new)
+			b, err = rewriteGoImports(b, repl)
 			if err != nil {
 				return nil, err
 			}
 		} else if path.Base(f.Name) == "go.mod" {
-			b, err = rewriteGoMod(b, old, new)
+			b, err = rewriteGoMod(b, repl)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if f.Name == old || strings.HasPrefix(f.Name, old+"/") || strings.HasPrefix(f.Name, old+"@") {
-			f.Name = strings.Replace(f.Name, old, new, 1)
+		newName := rewriteFileName(f.Name, repl)
+		if newName != f.Name {
+			f.Name = newName
 		}
 		hdr := &zip.FileHeader{
 			Name:   f.Name,
@@ -224,15 +323,29 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		newPath := fmt.Sprintf("%s/%s", *host, userPath)
+		var modData []byte
+		if strings.HasSuffix(trimmed, ".mod") {
+			modData = data
+		} else {
+			modData, err = extractGoModFromZip(data)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+		}
+		repl, err := makeReplacements(userPath, upstreamPath, modData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if strings.HasSuffix(trimmed, ".zip") {
-			data, err = rewriteZip(data, upstreamPath, newPath)
+			data, err = rewriteZip(data, repl)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		} else { // .mod
-			data, err = rewriteGoMod(data, upstreamPath, newPath)
+			data, err = rewriteGoMod(data, repl)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
